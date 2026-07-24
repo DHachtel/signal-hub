@@ -201,6 +201,82 @@ document.getElementById('settings-save').addEventListener('click', () => {
   loadAndRender();
 });
 
+async function triggerWorkflowDispatch() {
+  const cfg = loadConfig();
+  const [owner, repo] = (cfg['cfg-github-repo'] || '').split('/');
+  if (!owner || !repo || !cfg['cfg-github-pat']) {
+    throw new Error('GitHub Repo oder PAT fehlt in den Einstellungen');
+  }
+  const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/signal-hub.yml/dispatches`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg['cfg-github-pat']}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ref: 'main' }),
+  });
+  if (resp.status !== 204) {
+    throw new Error(`GitHub API ${resp.status}`);
+  }
+}
+
+async function pollForCompletion(triggeredAt) {
+  const cfg = loadConfig();
+  const [owner, repo] = (cfg['cfg-github-repo'] || '').split('/');
+  const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/signal-hub.yml/runs?per_page=5`;
+  const maxAttempts = 12; // 12 * 15s = 3 minutes
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise(r => setTimeout(r, 15000));
+    try {
+      const resp = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${cfg['cfg-github-pat']}`,
+          'Accept': 'application/vnd.github+json',
+        },
+      });
+      if (!resp.ok) continue;
+      const body = await resp.json();
+      const freshRun = (body.workflow_runs || []).find(r =>
+        new Date(r.created_at).getTime() >= triggeredAt && r.status === 'completed'
+      );
+      if (freshRun) return true;
+    } catch (e) {
+      // transient network error while polling — keep trying until maxAttempts
+    }
+  }
+  return false;
+}
+
+document.getElementById('refresh-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('refresh-btn');
+  const freshnessEl = document.getElementById('freshness');
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  try {
+    btn.textContent = 'Starte Scan...';
+    const triggeredAt = Date.now();
+    await triggerWorkflowDispatch();
+    btn.textContent = 'Scan laeuft (~2-3 Min)...';
+    freshnessEl.textContent = 'Scan laeuft, bitte warten...';
+    const completed = await pollForCompletion(triggeredAt);
+    if (completed) {
+      btn.textContent = 'Fertig, lade neu...';
+      await loadAndRender();
+    } else {
+      freshnessEl.textContent = 'Scan laeuft laenger als erwartet — spaeter erneut pruefen.';
+      freshnessEl.className = 'warn';
+    }
+  } catch (e) {
+    freshnessEl.textContent = `Refresh fehlgeschlagen: ${e.message}`;
+    freshnessEl.className = 'fail';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
 loadAndRender();
 </script>
 </body>
