@@ -136,7 +136,12 @@ def scan_symbol(sym, spy_sma50_ok, spy_closes):
     errors are captured and surfaced as a 'stale' result instead.
     """
     try:
-        hist = yf.Ticker(sym).history(period='1y', interval='1d', auto_adjust=True)
+        # period='1y' returns only ~251 daily bars (just under the 252-bar
+        # minimum validate.validate_symbol requires for the Trend Template),
+        # which made every symbol fail as 'stale'. '2y' gives comfortable
+        # margin — TechScreener's own JS side hit the identical issue and
+        # fixed it the same way (6mo -> 2y for Trend Template SMA200).
+        hist = yf.Ticker(sym).history(period='2y', interval='1d', auto_adjust=True)
     except Exception as e:
         return {
             'price': None,
