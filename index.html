@@ -34,6 +34,17 @@
   dialog input { width: 100%; padding: 8px; margin-top: 4px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
   dialog .dialog-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
   #empty-state { padding: 40px; text-align: center; color: var(--muted); }
+  tr[data-sym] { cursor: pointer; }
+  .chart-row td { padding: 0; border-bottom: 1px solid var(--border); }
+  .chart-panel { padding: 16px; background: var(--bg); }
+  .chart-panel .chart-title { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .chart-panel canvas { width: 100%; height: 220px; display: block; }
+  .chart-panel .chart-status { padding: 24px 0; text-align: center; color: var(--muted); font-size: 13px; }
+  .chart-panel .chart-status.error { color: var(--red); }
+  .chart-panel .chart-retry { margin-top: 8px; }
+  @media (max-width: 600px) {
+    .chart-panel canvas { height: 160px; }
+  }
 </style>
 </head>
 <body>
@@ -146,6 +157,7 @@ function renderTable(doc) {
   const tbody = document.getElementById('table-body');
   const emptyState = document.getElementById('empty-state');
   tbody.innerHTML = '';
+  openChartSym = null;
 
   const symbols = (doc && doc.symbols) ? doc.symbols : {};
   const rows = Object.entries(symbols);
@@ -157,6 +169,7 @@ function renderTable(doc) {
 
   for (const [sym, data] of rows) {
     const tr = document.createElement('tr');
+    tr.dataset.sym = sym;
     const swing = data.swing || {};
     const insider = data.insider || {};
     const templateBadge = swing.template_pass
@@ -250,6 +263,65 @@ async function fetchChartOHLCV(sym) {
   candles.forEach((c, i) => { c.ema21 = ema21[i]; });
   return candles;
 }
+
+let openChartSym = null;
+
+function closeOpenChartRow() {
+  const existing = document.querySelector('tr.chart-row');
+  if (existing) existing.remove();
+  openChartSym = null;
+}
+
+async function toggleChartRow(sym, rowEl) {
+  if (openChartSym === sym) {
+    closeOpenChartRow();
+    return;
+  }
+  closeOpenChartRow();
+  openChartSym = sym;
+
+  const chartRow = document.createElement('tr');
+  chartRow.className = 'chart-row';
+  chartRow.dataset.sym = sym;
+  const td = document.createElement('td');
+  td.colSpan = 6;
+  td.innerHTML = `
+    <div class="chart-panel">
+      <div class="chart-title">${escapeHtml(sym)} — 3 Monate, EMA21</div>
+      <div class="chart-status">Lade Chart...</div>
+    </div>
+  `;
+  chartRow.appendChild(td);
+  rowEl.after(chartRow);
+
+  const panel = td.querySelector('.chart-panel');
+  const status = panel.querySelector('.chart-status');
+
+  try {
+    const candles = await fetchChartOHLCV(sym);
+    if (openChartSym !== sym) return; // user closed/switched while this fetch was in flight
+    if (!candles) {
+      status.textContent = 'Keine ausreichenden Kursdaten verfuegbar.';
+      status.className = 'chart-status error';
+      return;
+    }
+    status.remove();
+    const debugEl = document.createElement('div');
+    debugEl.style.cssText = 'font-family:monospace;font-size:11px;color:var(--muted)';
+    debugEl.textContent = `${candles.length} Kerzen geladen. Letzter Kurs: $${candles[candles.length - 1].c.toFixed(2)}`;
+    panel.appendChild(debugEl);
+  } catch (e) {
+    if (openChartSym !== sym) return;
+    status.textContent = `Fehler beim Laden: ${e.message}`;
+    status.className = 'chart-status error';
+  }
+}
+
+document.getElementById('table-body').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-sym]');
+  if (!tr) return;
+  toggleChartRow(tr.dataset.sym, tr);
+});
 
 async function loadAndRender() {
   if (!hasMinimalConfig()) {
