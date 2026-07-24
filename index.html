@@ -272,6 +272,15 @@ function closeOpenChartRow() {
   openChartSym = null;
 }
 
+function showChartError(status, message, sym, rowEl) {
+  status.innerHTML = `${message}<br><button class="chart-retry">Erneut versuchen</button>`;
+  status.className = 'chart-status error';
+  status.querySelector('.chart-retry').addEventListener('click', () => {
+    closeOpenChartRow();
+    toggleChartRow(sym, rowEl);
+  });
+}
+
 async function toggleChartRow(sym, rowEl) {
   if (openChartSym === sym) {
     closeOpenChartRow();
@@ -301,12 +310,7 @@ async function toggleChartRow(sym, rowEl) {
     const candles = await fetchChartOHLCV(sym);
     if (openChartSym !== sym) return; // user closed/switched while this fetch was in flight
     if (!candles) {
-      status.innerHTML = 'Keine ausreichenden Kursdaten verfuegbar.<br><button class="chart-retry">Erneut versuchen</button>';
-      status.className = 'chart-status error';
-      status.querySelector('.chart-retry').addEventListener('click', () => {
-        closeOpenChartRow();
-        toggleChartRow(sym, rowEl);
-      });
+      showChartError(status, 'Keine ausreichenden Kursdaten verfuegbar.', sym, rowEl);
       return;
     }
     status.remove();
@@ -315,12 +319,7 @@ async function toggleChartRow(sym, rowEl) {
     drawMiniChart(canvas, candles);
   } catch (e) {
     if (openChartSym !== sym) return;
-    status.innerHTML = `Fehler beim Laden: ${escapeHtml(e.message)}<br><button class="chart-retry">Erneut versuchen</button>`;
-    status.className = 'chart-status error';
-    status.querySelector('.chart-retry').addEventListener('click', () => {
-      closeOpenChartRow();
-      toggleChartRow(sym, rowEl);
-    });
+    showChartError(status, `Fehler beim Laden: ${escapeHtml(e.message)}`, sym, rowEl);
   }
 }
 
