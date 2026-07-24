@@ -325,8 +325,14 @@ async function toggleChartRow(sym, rowEl) {
 }
 
 function drawMiniChart(canvas, candles) {
-  const width = canvas.parentElement.clientWidth;
-  const height = 220;
+  const panel = canvas.parentElement;
+  const panelStyle = getComputedStyle(panel);
+  const paddingH = parseFloat(panelStyle.paddingLeft) + parseFloat(panelStyle.paddingRight);
+  const width = panel.clientWidth - paddingH;
+  // Mirror the .chart-panel canvas height rules in the <style> block (default 220px,
+  // 160px under the @media (max-width: 600px) breakpoint) so the backing-store size
+  // and draw math match what CSS actually renders.
+  const height = window.matchMedia('(max-width: 600px)').matches ? 160 : 220;
   const dpr = window.devicePixelRatio || 1;
   canvas.width = width * dpr;
   canvas.height = height * dpr;
