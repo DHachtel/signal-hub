@@ -133,6 +133,15 @@ function renderFreshness(doc) {
   el.className = doc.meta.run_status === 'ok' ? '' : (doc.meta.run_status === 'partial' ? 'warn' : 'fail');
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderTable(doc) {
   const tbody = document.getElementById('table-body');
   const emptyState = document.getElementById('empty-state');
@@ -155,10 +164,10 @@ function renderTable(doc) {
     const signalText = swing.signal === 'buy' ? `buy @ ${swing.entry ?? '-'}` : '–';
     const insiderBadge = insider.cluster_buy ? '<span class="badge insider">Cluster-Buy</span>' : '—';
     const qualityNote = data.data_quality === 'stale'
-      ? ` <span title="${data.data_quality_reason || ''}">⚠️</span>` : '';
+      ? ` <span title="${escapeHtml(data.data_quality_reason || '')}">⚠️</span>` : '';
 
     tr.innerHTML = `
-      <td>${sym}${qualityNote}</td>
+      <td>${escapeHtml(sym)}${qualityNote}</td>
       <td>${data.price != null ? '$' + data.price.toFixed(2) : '–'}</td>
       <td>${templateBadge}</td>
       <td>${signalText}</td>
