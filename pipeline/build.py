@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from pipeline import insider_scan, jsonbin_client, market_ampel, swing_scan, telegram_notify, validate
 
-DASHBOARD_URL = 'https://REPLACE-WITH-GITHUB-USERNAME.github.io/signal-hub/'
+DASHBOARD_URL = 'https://dhachtel.github.io/signal-hub/'
 
 
 def run():
