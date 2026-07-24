@@ -301,8 +301,12 @@ async function toggleChartRow(sym, rowEl) {
     const candles = await fetchChartOHLCV(sym);
     if (openChartSym !== sym) return; // user closed/switched while this fetch was in flight
     if (!candles) {
-      status.textContent = 'Keine ausreichenden Kursdaten verfuegbar.';
+      status.innerHTML = 'Keine ausreichenden Kursdaten verfuegbar.<br><button class="chart-retry">Erneut versuchen</button>';
       status.className = 'chart-status error';
+      status.querySelector('.chart-retry').addEventListener('click', () => {
+        closeOpenChartRow();
+        toggleChartRow(sym, rowEl);
+      });
       return;
     }
     status.remove();
@@ -311,8 +315,12 @@ async function toggleChartRow(sym, rowEl) {
     drawMiniChart(canvas, candles);
   } catch (e) {
     if (openChartSym !== sym) return;
-    status.textContent = `Fehler beim Laden: ${e.message}`;
+    status.innerHTML = `Fehler beim Laden: ${escapeHtml(e.message)}<br><button class="chart-retry">Erneut versuchen</button>`;
     status.className = 'chart-status error';
+    status.querySelector('.chart-retry').addEventListener('click', () => {
+      closeOpenChartRow();
+      toggleChartRow(sym, rowEl);
+    });
   }
 }
 
