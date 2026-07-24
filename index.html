@@ -306,14 +306,93 @@ async function toggleChartRow(sym, rowEl) {
       return;
     }
     status.remove();
-    const debugEl = document.createElement('div');
-    debugEl.style.cssText = 'font-family:monospace;font-size:11px;color:var(--muted)';
-    debugEl.textContent = `${candles.length} Kerzen geladen. Letzter Kurs: $${candles[candles.length - 1].c.toFixed(2)}`;
-    panel.appendChild(debugEl);
+    const canvas = document.createElement('canvas');
+    panel.appendChild(canvas);
+    drawMiniChart(canvas, candles);
   } catch (e) {
     if (openChartSym !== sym) return;
     status.textContent = `Fehler beim Laden: ${e.message}`;
     status.className = 'chart-status error';
+  }
+}
+
+function drawMiniChart(canvas, candles) {
+  const width = canvas.parentElement.clientWidth;
+  const height = 220;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const padT = 12, padB = 12, padL = 4, padR = 54;
+  const left = padL, right = width - padR, top = padT, bottom = height - padB;
+  const n = candles.length;
+  const colW = (right - left) / n;
+  const bodyW = Math.max(1, colW * 0.6);
+
+  ctx.fillStyle = '#0f1115'; // matches --bg
+  ctx.fillRect(0, 0, width, height);
+
+  let minP = Infinity, maxP = -Infinity;
+  candles.forEach(c => {
+    if (c.h > maxP) maxP = c.h;
+    if (c.l < minP) minP = c.l;
+    if (c.ema21 != null) {
+      if (c.ema21 > maxP) maxP = c.ema21;
+      if (c.ema21 < minP) minP = c.ema21;
+    }
+  });
+  const priceRange = (maxP - minP) || 1;
+  const py = p => top + (maxP - p) / priceRange * (bottom - top);
+  const px = i => left + (i + 0.5) * colW;
+
+  ctx.strokeStyle = '#2a2f3a'; // matches --border
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) {
+    const y = top + (bottom - top) * i / 3;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = '#e0a52c'; // matches --amber
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let started = false;
+  candles.forEach((c, i) => {
+    if (c.ema21 == null) return;
+    const x = px(i), y = py(c.ema21);
+    if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+  });
+  ctx.stroke();
+
+  candles.forEach((c, i) => {
+    const x = px(i);
+    const up = c.c >= c.o;
+    const color = up ? '#3ecf8e' : '#ef5b5b'; // matches --green / --red
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, py(c.h));
+    ctx.lineTo(x, py(c.l));
+    ctx.stroke();
+    const bodyTop = py(Math.max(c.o, c.c));
+    const bodyBottom = py(Math.min(c.o, c.c));
+    ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, Math.max(1, bodyBottom - bodyTop));
+  });
+
+  ctx.fillStyle = '#8b93a3'; // matches --muted
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'left';
+  for (let i = 0; i <= 3; i++) {
+    const priceVal = maxP - priceRange * i / 3;
+    const y = top + (bottom - top) * i / 3;
+    ctx.fillText('$' + priceVal.toFixed(2), right + 4, y + 3);
   }
 }
 
