@@ -319,7 +319,7 @@ async function toggleChartRow(sym, rowEl) {
 
 document.getElementById('table-body').addEventListener('click', (e) => {
   const tr = e.target.closest('tr[data-sym]');
-  if (!tr) return;
+  if (!tr || tr.classList.contains('chart-row')) return;
   toggleChartRow(tr.dataset.sym, tr);
 });
 
