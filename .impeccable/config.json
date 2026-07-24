@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-07-24T16:34:57.696Z",
+        "reason": "User delegated the decision. Dense single-user trading dashboard intentionally keeps a tight 13/14px body-vs-caption text scale; h1 and badge extremes were already widened in an earlier pass this session. New chart-panel text reuses the existing 13px tier rather than adding a new size."
+      }
+    ]
+  }
+}
