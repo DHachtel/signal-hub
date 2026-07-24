@@ -14,9 +14,13 @@ def test_calc_sma_known_values():
 def test_calc_ema_seeds_with_sma_of_first_period():
     closes = [10.0, 20.0, 30.0, 40.0, 50.0]
     result = calc_ema(closes, 3)
+    # k = 2/(3+1) = 0.5
+    # result[2] = SMA(10, 20, 30) = 20.0
+    # result[3] = 40 * 0.5 + 20 * 0.5 = 30.0
+    # result[4] = 50 * 0.5 + 30 * 0.5 = 40.0
     assert result[2] == 20.0
-    assert result[3] is not None
-    assert result[4] is not None
+    assert result[3] == 30.0
+    assert result[4] == 40.0
 
 
 def test_calc_rs_positive_when_symbol_outperforms_spy():
@@ -35,8 +39,16 @@ def test_calc_atr_positive_for_volatile_series():
     lows = [9, 9.5, 10, 9.8, 11]
     closes = [9.5, 10.5, 11.5, 10.2, 12.5]
     atr = calc_atr(highs, lows, closes, period=3)
+    # TR[1] = max(11-9.5, |11-9.5|, |9.5-9.5|) = 1.5
+    # TR[2] = max(12-10, |12-10.5|, |10-10.5|) = 2.0
+    # TR[3] = max(11-9.8, |11-11.5|, |9.8-11.5|) = 1.7
+    # TR[4] = max(13-11, |13-10.2|, |11-10.2|) = 2.8
+    # trs = [1.5, 2.0, 1.7, 2.8]
+    # k = 0.5, result[2] = SMA(1.5, 2.0, 1.7) = 5.2/3 ≈ 1.7333
+    # result[3] = 2.8 * 0.5 + 1.7333 * 0.5 ≈ 2.2667
+    expected_atr = 2.2667
     assert atr is not None
-    assert atr > 0
+    assert abs(atr - expected_atr) < 0.01
 
 
 def test_calc_atr_none_with_insufficient_bars():

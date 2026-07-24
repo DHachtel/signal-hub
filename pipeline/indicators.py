@@ -5,6 +5,8 @@ Only the functions actually used by signal-hub's swing scan are ported.
 
 
 def calc_ema(arr, period):
+    """EMA with a quirk carried over from the source: None values are excluded
+    when seeding the initial SMA, but treated as 0 during the smoothing loop."""
     k = 2 / (period + 1)
     result = [None] * len(arr)
     if len(arr) < period:
