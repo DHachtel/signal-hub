@@ -178,6 +178,79 @@ function renderTable(doc) {
   }
 }
 
+// ═══════════════════════════════════════════
+// CHART PANEL (candlesticks + EMA21, live-fetched per symbol)
+// Ported from TechScreener_Pro_v23.html's fetchWithProxy/fetchYahooOHLCV/
+// calcEMA, scoped to a fixed 3-month range with EMA21 only.
+// ═══════════════════════════════════════════
+
+const CHART_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
+  'https://thingproxy.freeboard.io/fetch/',
+  'https://api.codetabs.com/v1/proxy?quest='
+];
+
+async function fetchWithCorsProxy(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (r.ok) return await r.json();
+  } catch (e) {
+    // direct fetch failed (likely CORS) — fall through to proxies
+  }
+  for (const proxy of CHART_PROXIES) {
+    try {
+      const r = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const text = await r.text();
+        return JSON.parse(text);
+      }
+    } catch (e) {
+      // try next proxy
+    }
+  }
+  return null;
+}
+
+function calcEmaJs(arr, period) {
+  const k = 2 / (period + 1);
+  const result = new Array(arr.length).fill(null);
+  if (arr.length < period) return result;
+  const seedEnd = period - 1;
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += (arr[i] || 0);
+  result[seedEnd] = sum / period;
+  for (let i = seedEnd + 1; i < arr.length; i++) {
+    result[i] = (arr[i] || 0) * k + result[i - 1] * (1 - k);
+  }
+  return result;
+}
+
+async function fetchChartOHLCV(sym) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=3mo`;
+  const raw = await fetchWithCorsProxy(url);
+  const result = raw && raw.chart && raw.chart.result && raw.chart.result[0];
+  if (!result || !result.timestamp || !result.indicators || !result.indicators.quote) return null;
+  const ts = result.timestamp;
+  const quote = result.indicators.quote[0];
+  const candles = [];
+  for (let i = 0; i < ts.length; i++) {
+    if (quote.close[i] == null || quote.high[i] == null || quote.low[i] == null || quote.low[i] <= 0) continue;
+    candles.push({
+      t: ts[i] * 1000,
+      o: quote.open[i] != null ? quote.open[i] : quote.close[i],
+      h: quote.high[i],
+      l: quote.low[i],
+      c: quote.close[i],
+    });
+  }
+  if (candles.length < 20) return null;
+  const closes = candles.map(c => c.c);
+  const ema21 = calcEmaJs(closes, 21);
+  candles.forEach((c, i) => { c.ema21 = ema21[i]; });
+  return candles;
+}
+
 async function loadAndRender() {
   if (!hasMinimalConfig()) {
     document.getElementById('freshness').textContent = 'Bitte Einstellungen konfigurieren.';
