@@ -2,7 +2,7 @@
 is written into the JSONBin document, and aggregates per-source run
 status into an overall run_status for meta.run_status.
 """
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 MAX_DATA_AGE_DAYS = 4  # covers a normal weekend + one holiday; daily EOD bars only
 MIN_TREND_TEMPLATE_BARS = 252
