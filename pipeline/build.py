@@ -76,13 +76,13 @@ def run():
 
     new_buy_signals = [
         sym for sym, data in symbols.items()
-        if data.get('swing', {}).get('signal') == 'buy'
-        and prev_symbols.get(sym, {}).get('swing', {}).get('signal') != 'buy'
+        if (data.get('swing') or {}).get('signal') == 'buy'
+        and (prev_symbols.get(sym, {}).get('swing') or {}).get('signal') != 'buy'
     ]
     new_cluster_buys = [
         sym for sym, data in symbols.items()
-        if data.get('insider', {}).get('cluster_buy')
-        and not prev_symbols.get(sym, {}).get('insider', {}).get('cluster_buy')
+        if (data.get('insider') or {}).get('cluster_buy')
+        and not (prev_symbols.get(sym, {}).get('insider') or {}).get('cluster_buy')
     ]
 
     jsonbin_client.write_bin(document)

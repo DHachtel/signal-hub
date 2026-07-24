@@ -89,6 +89,30 @@ def test_run_sends_notification_for_new_buy_signal():
     assert DASHBOARD_URL in sent_text
 
 
+def test_run_handles_stale_symbol_with_none_swing_without_crashing():
+    # A symbol with stale/insufficient data has swing=None (see swing_scan.scan_symbol).
+    # The diff logic must not crash on that, for both the current and the previous document.
+    prev_symbols = {
+        'ACME': {'swing': None, 'insider': {'cluster_buy': False}},
+    }
+    patches = _patch_all(prev_symbols=prev_symbols)
+    # Override the default swing_scan mock with one that includes a stale (swing=None) symbol.
+    patches[1] = patch('pipeline.build.swing_scan.run_swing_scan', return_value={
+        'ACME': {'price': None, 'data_quality': 'stale', 'swing': None},
+        'CAVA': {'price': 100.0, 'data_quality': 'fresh',
+                 'swing': {'template_pass': True, 'criteria': [True] * 6, 'rs_spy': 5.0, 'signal': 'buy',
+                           'entry': 100.0, 'stop': 95.0, 'trail': 98.0}},
+    })
+    _start_all(patches)
+    try:
+        doc = run()
+    finally:
+        _stop_all(patches)
+
+    assert doc['symbols']['ACME']['swing'] is None
+    assert doc['symbols']['CAVA']['swing']['signal'] == 'buy'
+
+
 def test_run_skips_notification_when_nothing_new():
     # previous run already had the same buy signal and cluster buy -> nothing new
     prev_symbols = {
