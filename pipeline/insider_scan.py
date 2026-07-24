@@ -111,20 +111,37 @@ def _group_universe_trades(trades):
     for sym, data in grouped.items():
         distinct_insiders = {tr['insider'] for tr in data['trades'] if tr.get('insider')}
         data['cluster_buy'] = len(distinct_insiders) >= 2
+        data['insider_count'] = len(distinct_insiders)
     return grouped
 
 
 def run_insider_scan(universe):
     """Full insider scan: universe purchases + cluster buys outside universe.
-    Returns {sym: {cluster_buy: bool, trades: [...]}} ready for the symbols
-    section of the JSONBin document.
+    Returns {sym: {cluster_buy: bool, trades: [...], insider_count: int|None}}
+    ready for the symbols section of the JSONBin document.
+
+    The two source pages are fetched independently: a failure on one
+    (network error, site layout change, rate limit) does not discard
+    results already fetched from the other — it's logged and treated as
+    an empty result for that source instead.
     """
-    universe_trades = fetch_universe_purchases(universe)
+    try:
+        universe_trades = fetch_universe_purchases(universe)
+    except Exception as e:
+        print(f'insider_scan: fetch_universe_purchases failed: {e}')
+        universe_trades = []
     result = _group_universe_trades(universe_trades)
 
-    for entry in fetch_cluster_buys_outside_universe(universe):
+    try:
+        cluster_entries = fetch_cluster_buys_outside_universe(universe)
+    except Exception as e:
+        print(f'insider_scan: fetch_cluster_buys_outside_universe failed: {e}')
+        cluster_entries = []
+
+    for entry in cluster_entries:
         result[entry['sym']] = {
             'cluster_buy': True,
+            'insider_count': entry['insider_count'],
             'trades': entry['trades'],
         }
 
