@@ -52,3 +52,53 @@ def test_ema21_pullback_returns_none_on_downtrend():
     volumes = [1_000_000] * n
     signal = detect_ema21_pullback(closes, opens, highs, lows, volumes, spy_sma50_ok=True)
     assert signal is None
+
+
+from unittest.mock import patch, MagicMock
+import pandas as pd
+from pipeline.swing_scan import scan_symbol, UNIVERSE
+
+
+def _make_history_df(closes):
+    n = len(closes)
+    dates = pd.date_range(end=pd.Timestamp.utcnow().normalize(), periods=n, freq='D')
+    return pd.DataFrame({
+        'Open': closes,
+        'High': [c * 1.01 for c in closes],
+        'Low': [c * 0.99 for c in closes],
+        'Close': closes,
+        'Volume': [1_000_000] * n,
+    }, index=dates)
+
+
+def test_universe_is_nonempty_and_uppercase():
+    assert len(UNIVERSE) > 0
+    assert all(sym == sym.upper() for sym in UNIVERSE)
+
+
+def test_scan_symbol_marks_stale_on_empty_history():
+    with patch('pipeline.swing_scan.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame()
+        result = scan_symbol('XYZ', spy_sma50_ok=True, spy_closes=None)
+    assert result['data_quality'] == 'stale'
+    assert result['swing'] is None
+    assert 'data_quality_reason' in result
+
+
+def test_scan_symbol_returns_swing_result_on_sufficient_history():
+    closes = make_uptrend(260, 50.0, 0.002)
+    df = _make_history_df(closes)
+    with patch('pipeline.swing_scan.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = df
+        result = scan_symbol('CAVA', spy_sma50_ok=True, spy_closes=closes)
+    assert result['data_quality'] == 'fresh'
+    assert result['swing']['template_pass'] is True
+    assert result['price'] == round(closes[-1], 2)
+
+
+def test_scan_symbol_handles_fetch_exception():
+    with patch('pipeline.swing_scan.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.side_effect = RuntimeError('network error')
+        result = scan_symbol('CAVA', spy_sma50_ok=True, spy_closes=None)
+    assert result['data_quality'] == 'stale'
+    assert 'network error' in result['data_quality_reason']

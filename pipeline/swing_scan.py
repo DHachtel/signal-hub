@@ -102,3 +102,95 @@ def detect_ema21_pullback(closes, opens, highs, lows, volumes, spy_sma50_ok):
         'pb_days': max(pb_days, 1),
         'criteria': tt_criteria,
     }
+
+
+import yfinance as yf
+
+from pipeline import validate
+
+UNIVERSE = [
+    # KERN: US Mid-Cap Growth
+    'COIN', 'HOOD', 'SOFI', 'AFRM', 'UPST', 'RBLX', 'ZETA', 'SMCI',
+    'CAVA', 'DUOL', 'CELH', 'HIMS', 'GTLB', 'PATH',
+    # VOLATILE LARGE-CAPS
+    'TSLA', 'AMD', 'PLTR', 'CRWD', 'NET', 'DDOG', 'SNOW', 'AXON', 'PANW', 'CRM', 'ADBE',
+    # BRANCHEN-DIVERSIFIKATION
+    'ENPH', 'DKNG', 'ABNB', 'MELI', 'NU', 'SHOP', 'ROKU', 'DASH',
+    # Mid-Cap Growth Erweiterung
+    'ONON', 'BILL', 'MNDY', 'CFLT', 'GRAB', 'TOST', 'ARM', 'BIRK',
+    'CART', 'IOT', 'DOCS', 'PCOR', 'GLBE', 'RELY', 'TMDX', 'KVYO', 'CWAN', 'ASAN', 'BRZE',
+    # Volatile Large-Caps
+    'NVDA', 'META', 'GOOGL', 'AMZN', 'NFLX', 'UBER', 'SQ', 'SPOT',
+    'PINS', 'SNAP', 'ZS', 'FTNT', 'WDAY', 'NOW', 'INTU',
+    # Sektor-Diversifikation
+    'LLY', 'VST', 'CEG', 'FSLR', 'GEV', 'TRGP', 'EME', 'PWR',
+    'DECK', 'WING', 'ELF', 'LULU', 'PSTG', 'ANET', 'MSTR',
+]
+
+
+def scan_symbol(sym, spy_sma50_ok, spy_closes):
+    """Fetch + evaluate a single symbol's swing setup.
+
+    Returns a dict with keys 'price', 'swing', 'data_quality',
+    and optionally 'data_quality_reason'. Never raises — fetch/parse
+    errors are captured and surfaced as a 'stale' result instead.
+    """
+    try:
+        hist = yf.Ticker(sym).history(period='1y', interval='1d', auto_adjust=True)
+    except Exception as e:
+        return {
+            'price': None,
+            'swing': None,
+            'data_quality': 'stale',
+            'data_quality_reason': f'Fehler beim Laden: {e}',
+        }
+
+    if hist.empty:
+        return {
+            'price': None,
+            'swing': None,
+            'data_quality': 'stale',
+            'data_quality_reason': 'Keine Kursdaten von Yahoo Finance',
+        }
+
+    closes = hist['Close'].tolist()
+    opens = hist['Open'].tolist()
+    highs = hist['High'].tolist()
+    lows = hist['Low'].tolist()
+    volumes = hist['Volume'].tolist()
+    last_date = hist.index[-1].date()
+
+    quality, reason = validate.validate_symbol(last_date, closes)
+
+    result = {'price': round(closes[-1], 2), 'data_quality': quality}
+    if reason:
+        result['data_quality_reason'] = reason
+
+    if quality == 'stale':
+        result['swing'] = None
+        return result
+
+    tt_pass, tt_criteria = check_trend_template(closes)
+    rs = None
+    if spy_closes:
+        from pipeline.indicators import calc_rs
+        rs = calc_rs(closes[-126:], spy_closes[-126:])
+    signal = detect_ema21_pullback(closes, opens, highs, lows, volumes, spy_sma50_ok) if tt_pass else None
+
+    result['swing'] = {
+        'template_pass': tt_pass,
+        'criteria': tt_criteria,
+        'rs_spy': rs,
+        'signal': 'buy' if signal else '-',
+    }
+    if signal:
+        result['swing']['entry'] = signal['entry']
+        result['swing']['stop'] = signal['stop']
+        result['swing']['trail'] = signal['trail_ema10']
+
+    return result
+
+
+def run_swing_scan(spy_sma50_ok, spy_closes):
+    """Scan every symbol in UNIVERSE. Returns {sym: scan_symbol_result}."""
+    return {sym: scan_symbol(sym, spy_sma50_ok, spy_closes) for sym in UNIVERSE}
