@@ -1061,8 +1061,13 @@ def fetch_openinsider_table(url):
 
 
 def fetch_universe_purchases(universe):
-    """Latest insider purchases filtered to symbols in `universe`, purchases only,
-    trades below MIN_TRADE_VALUE dropped as noise."""
+    """Latest insider purchases filtered to symbols in `universe`, purchases only.
+
+    No MIN_TRADE_VALUE filter here: this is the curated ~80-symbol watchlist,
+    where any insider purchase is worth surfacing. The value filter only
+    applies to fetch_cluster_buys_outside_universe, which scans the broad,
+    noisy market-wide feed and needs it to cut noise.
+    """
     universe_set = {s.upper() for s in universe}
     trades = []
     for row in fetch_openinsider_table(PURCHASES_URL):
@@ -1072,7 +1077,7 @@ def fetch_universe_purchases(universe):
         if not row.get('Trade Type', '').startswith('P'):
             continue
         value = parse_value(row.get('Value', ''))
-        if value is None or abs(value) < MIN_TRADE_VALUE:
+        if value is None:
             continue
         trades.append({
             'sym': ticker,
@@ -1121,20 +1126,37 @@ def _group_universe_trades(trades):
     for sym, data in grouped.items():
         distinct_insiders = {tr['insider'] for tr in data['trades'] if tr.get('insider')}
         data['cluster_buy'] = len(distinct_insiders) >= 2
+        data['insider_count'] = len(distinct_insiders)
     return grouped
 
 
 def run_insider_scan(universe):
     """Full insider scan: universe purchases + cluster buys outside universe.
-    Returns {sym: {cluster_buy: bool, trades: [...]}} ready for the symbols
-    section of the JSONBin document.
+    Returns {sym: {cluster_buy: bool, trades: [...], insider_count: int}}
+    ready for the symbols section of the JSONBin document.
+
+    The two source pages are fetched independently: a failure on one
+    (network error, site layout change, rate limit) does not discard
+    results already fetched from the other — it's logged and treated as
+    an empty result for that source instead.
     """
-    universe_trades = fetch_universe_purchases(universe)
+    try:
+        universe_trades = fetch_universe_purchases(universe)
+    except Exception as e:
+        print(f'insider_scan: fetch_universe_purchases failed: {e}')
+        universe_trades = []
     result = _group_universe_trades(universe_trades)
 
-    for entry in fetch_cluster_buys_outside_universe(universe):
+    try:
+        cluster_entries = fetch_cluster_buys_outside_universe(universe)
+    except Exception as e:
+        print(f'insider_scan: fetch_cluster_buys_outside_universe failed: {e}')
+        cluster_entries = []
+
+    for entry in cluster_entries:
         result[entry['sym']] = {
             'cluster_buy': True,
+            'insider_count': entry['insider_count'],
             'trades': entry['trades'],
         }
 
@@ -1576,15 +1598,18 @@ def run():
         previous = {}
     prev_symbols = previous.get('symbols', {})
 
+    # `data.get('swing') or {}` (not `data.get('swing', {})`): stale symbols
+    # store an explicit `swing: None`, and `.get(key, {})` does NOT substitute
+    # the default when the key exists with value None — only `or {}` does.
     new_buy_signals = [
         sym for sym, data in symbols.items()
-        if data.get('swing', {}).get('signal') == 'buy'
-        and prev_symbols.get(sym, {}).get('swing', {}).get('signal') != 'buy'
+        if (data.get('swing') or {}).get('signal') == 'buy'
+        and (prev_symbols.get(sym, {}).get('swing') or {}).get('signal') != 'buy'
     ]
     new_cluster_buys = [
         sym for sym, data in symbols.items()
-        if data.get('insider', {}).get('cluster_buy')
-        and not prev_symbols.get(sym, {}).get('insider', {}).get('cluster_buy')
+        if (data.get('insider') or {}).get('cluster_buy')
+        and not (prev_symbols.get(sym, {}).get('insider') or {}).get('cluster_buy')
     ]
 
     jsonbin_client.write_bin(document)
