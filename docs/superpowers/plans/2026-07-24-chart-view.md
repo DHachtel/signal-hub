@@ -280,10 +280,12 @@ async function toggleChartRow(sym, rowEl) {
 
 document.getElementById('table-body').addEventListener('click', (e) => {
   const tr = e.target.closest('tr[data-sym]');
-  if (!tr) return;
+  if (!tr || tr.classList.contains('chart-row')) return;
   toggleChartRow(tr.dataset.sym, tr);
 });
 ```
+
+The `tr.classList.contains('chart-row')` check matters: the injected chart-row also carries a `data-sym` attribute (so it matches `tr[data-sym]` too), and without this check, clicking anywhere inside the open chart panel — the loading text, the debug line, empty panel space — would immediately collapse it again, since the delegated handler would treat that click as toggling the chart-row's own symbol.
 
 (The `debugEl` block is a temporary placeholder — Task 3 replaces it with the real canvas chart. Leaving it here lets this task verify the fetch/toggle mechanics on their own before rendering is added.)
 
